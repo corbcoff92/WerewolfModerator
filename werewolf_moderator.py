@@ -8,10 +8,17 @@ class NotEnoughPlayersException(Exception):
 
 ROLES_TO_ASSIGN = [Roles.WEREWOLF, Roles.DOCTOR, Roles.SEER]
 
+def shuffle_list(l):
+    num_items = len(l)
+    for _ in range(5):
+        for item in l:
+            idx = randint(0, num_items - 1)
+            l.append(l.pop(idx))
+
 class Server:
     def __init__(self):
-        self.players = []
-        self.client = Client()
+        self.clients = []
+        self.active_players = []
         self.done = False
         self.exit = False
 
@@ -20,7 +27,6 @@ class Server:
 
     
     def accept_players(self):
-        players_joined = []
         adding_players = True
         while adding_players and not self.exit:
             selection = int(input('Server\n\t1. Add player\n\t2. Begin\n\t3. Exit\nPlease make a selection: '''))    
@@ -30,10 +36,11 @@ class Server:
                     name = input('Please enter your name: ')
                     if not name:
                         print('Name cannot be blank, try again...')
-                players_joined.append(name)
+                self.client_join(name)
             elif selection == 2:
-                if len(players_joined) >= len(ROLES_TO_ASSIGN) + 2:
-                    self.assign_roles(players_joined)
+                if len(self.clients) >= len(ROLES_TO_ASSIGN) + 2:
+                    self.active_players = list(self.clients)
+                    self.assign_roles()
                     self.begin()
                 else:
                     print('Not enough players to begin...')        
@@ -41,6 +48,13 @@ class Server:
                 adding_players = False
                 self.exit = True
     
+    def client_join(self, name):
+        self.clients.append(Client(name))
+        num_joined = len(self.clients)
+        print(f'{num_joined} Current Players:')
+        for i,client in enumerate(self.clients):
+            print(f'\t{i+1}. {client.name}')
+
     def begin(self):
         while not self.exit and not self.done:
             if not self.exit:        
@@ -52,40 +66,60 @@ class Server:
                 elif selection == 3:
                     self.exit = True
 
-    def assign_roles(self, players_joined):
-        roles_to_assign = ROLES_TO_ASSIGN        
-        if len(players_joined) >= 15:
-            roles_to_assign.extend([Roles.WEREWOLF]*((len(players_joined) - 11)//4))
+    def assign_roles(self):
+        roles_to_assign = ROLES_TO_ASSIGN
+        if len(self.active_players) >= 15:
+            roles_to_assign.extend([Roles.WEREWOLF]*((len(self.active_players) - 11)//4))
+
+        shuffle_list(roles_to_assign)
+        shuffle_list(self.active_players)
+
+        for player, role in zip(self.active_players, roles_to_assign):
+            player.role = role
         
-        while roles_to_assign and players_joined:
-            idx = randint(0, len(players_joined)-1)
-            self.players.append(Player(players_joined.pop(idx), roles_to_assign.pop()))
-        
-        while players_joined:
-            self.players.append(Player(players_joined.pop(), Roles.VILLAGER))
-    
+        shuffle_list(self.active_players)
+            
     def day(self):
-        votes = self.client.day(self.players)
+        votes = []
+        for player in self.active_players:
+            votes.append(player.day(self.active_players))
+        
         player_with_most_votes = max(votes, key=votes.count)
-        if (votes.count(player_with_most_votes) > len(self.players) // 2):
+        if (votes.count(player_with_most_votes) > len(self.active_players) // 2):
             print(f'Server: {player_with_most_votes.name} has been jailed...')
-            self.players.remove(player_with_most_votes)
+            self.active_players.remove(player_with_most_votes)
             self.check_game_over()
         else:
             print('Server: No player recieved a majority vote...')
 
     def night(self):
-        player_saved, player_hunted = self.client.night(self.players)
+        selected_players = []
+        for player in self.active_players:
+            selected_player = player.night(self.active_players)
+            if selected_player:
+                selected_players.append(selected_player)
+            
+        saved_players = [selected_player[1] for selected_player in selected_players if selected_player[0] == 'SAVED']
+        hunted_players = [selected_player[1] for selected_player in selected_players if selected_player[0] == 'HUNTED']
+
+        if saved_players:
+            player_saved = max(saved_players, key=saved_players.count)
+        else:
+            player_saved = None
+        
+        if hunted_players:
+            player_hunted = max(hunted_players, key=hunted_players.count)
+
         if player_saved == player_hunted:
             print(f'Server: {player_hunted.name} was hunted, but saved...')
         else:
             print(f'Server: {player_hunted.name} was hunted during the night...')
-            self.players.remove(player_hunted)
+            self.active_players.remove(player_hunted)
             self.check_game_over()
     
     def check_game_over(self):
-        num_werewolves = len([player for player in self.players if player.role == Roles.WEREWOLF])
-        num_villagers = len([player for player in self.players if player.role != Roles.WEREWOLF])
+        num_werewolves = len([player for player in self.active_players if player.role == Roles.WEREWOLF])
+        num_villagers = len([player for player in self.active_players if player.role != Roles.WEREWOLF])
         if num_villagers <= num_werewolves:
             self.game_over(True)
         elif num_werewolves <= 0:
@@ -97,53 +131,56 @@ class Server:
             print('Server: The werewolves have won!')
         else:
             print('Server: The villagers have won!')
-        self.client.winners(werewolves_won, self.players)
+
+        for client in self.clients:
+            client.check_winner(werewolves_won)
         
 
-class Client:    
+class Client(Player):
+    def __init__(self, name):
+        super().__init__(name)
+
     def night(self, players):
-        player_saved = None
-        for player in players:
-            role = player.role
-            os.system('cls')
-            input(f'Client: {player.name}, press enter when you are ready...')
-            print(f'Client: You are a {player.role}')
-            if role == Roles.VILLAGER:
-                print('Please select a random person...')
-                self.ask_player(players)
-            elif role == Roles.WEREWOLF:
-                werewolves = [player for player in players if player.role == Roles.WEREWOLF]
-                if len(werewolves) > 1:
-                    print(f'The other werewolves are: {" ".join([werewolf.name for werewolf in werewolves])}')
-                else:
-                    print(f"You are the only remaining werewolf, ")
-                print('Please select a player to hunt...')
-                player_hunted = self.ask_player(players, excluded_players=werewolves)
-            elif role == Roles.DOCTOR:
-                print('Please select a player that you would like to save...')
-                player_saved = self.ask_player(players)
-            elif role == Roles.SEER:
-                print('Please select a player that you would like to know about...')
-                selected_player = self.ask_player(players, excluded_players=[player])
-                print(f'{selected_player.name} {"is NOT" if selected_player.role != Roles.WEREWOLF else "IS"} a Werewolf...')
-                input('Press enter to continue...')
-        return player_saved, player_hunted
+        os.system('cls')
+        input(f'Client-{self.name}: {self.name}, press enter when you are ready...')
+        print(f'Client-{self.name}: You are a {self.role}')
+        if self.role == Roles.VILLAGER:
+            print('Please select a random person...')
+            self.ask_player(players)
+            return None
+        elif self.role == Roles.WEREWOLF:
+            werewolves = [player for player in players if player.role == Roles.WEREWOLF]
+            if len(werewolves) > 1:
+                print(f'The other werewolves are: {" ".join([werewolf.name for werewolf in werewolves])}')
+            else:
+                print(f"You are the only remaining werewolf.")
+            print('Please select a player to hunt...')
+            player_hunted = self.ask_player(players, excluded_players=werewolves)
+            return ('HUNTED', player_hunted)
+        elif self.role == Roles.DOCTOR:
+            print('Please select a player that you would like to save...')
+            player_saved = self.ask_player(players)
+            return ('SAVED', player_saved)
+        elif self.role == Roles.SEER:
+            print('Please select a player that you would like to know about...')
+            selected_player = self.ask_player(players, excluded_players=[self])
+            print(f'{selected_player.name} {"is NOT" if selected_player.role != Roles.WEREWOLF else "IS"} a Werewolf...')
+            input('Press enter to continue...')
+            return None
 
     def day(self, players):
-        votes = []
-        print('Client: Time for trial...')
-        for player in players:
-            print(f'{player.name} please select the person you would like to put on trial...')
-            votes.append(self.ask_player(players, excluded_players=[player]))
-        return votes
+        os.system('cls')
+        print(f'Client{self.name}: Time for trial...')
+        print(f'{self.name} please select the person you would like to put on trial...')
+        vote = self.ask_player(players, excluded_players=[self])
+        return vote
 
-    def winners(self, werewolves_won, players):
-        for player in players:
-            print(f'Client: You were a {player.role}. ', end='')
-            if (werewolves_won and player.role == Roles.WEREWOLF) or (not werewolves_won and player.role != Roles.WEREWOLF):
-                print('You have won!')
-            else:
-                print('You have lost!')
+    def check_winner(self, werewolves_won):
+        print(f'Client-{self.name}: You were a {self.role}{", and thus a Villager. " if self.role != Roles.WEREWOLF and self.role != Roles.VILLAGER else ". "}', end='')
+        if (werewolves_won and self.role == Roles.WEREWOLF) or (not werewolves_won and self.role != Roles.WEREWOLF):
+            print('You have won!')
+        else:
+            print('You have lost!')
 
     def ask_player(self, players, excluded_players=None):
         if excluded_players:
@@ -164,6 +201,5 @@ class Client:
 
 if __name__ == '__main__':
     server = Server()
-    players_joined = [f'Player {i}' for i in range(1, 5)]
-    server.assign_roles(players_joined)
-    server.begin()
+    server.clients = [Client(f'Player {i}') for i in range(1, 5)]
+    server.serve()
