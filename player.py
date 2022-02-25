@@ -6,7 +6,7 @@ class InvalidPlayerRole(Exception):
         self.message = message
     
     def __str__(self):
-        return f'InvalidPlayerRole: Role must be of type Roles.'
+        return f'InvalidPlayerRole: {self.message}'
 
 class Roles(Enum):
     VILLAGER = auto()
@@ -18,9 +18,9 @@ class Roles(Enum):
         return self.name.capitalize()
 
 class Player:
-    def __init__(self, name, role):
+    def __init__(self, name):
         self.name = name
-        self.role = role
+        self.role = Roles.VILLAGER
     
     @property
     def role(self):
@@ -31,4 +31,4 @@ class Player:
         if isinstance(role, Roles):
             self._role = role
         else:
-            raise Exception
+            raise InvalidPlayerRole('Role must be of type Roles.')
