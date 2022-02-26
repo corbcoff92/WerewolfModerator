@@ -1,6 +1,6 @@
 import threading
 import time
-from utils import Roles
+from shared import Roles
 import os
 import socket
 

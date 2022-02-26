@@ -1,5 +1,5 @@
-from utils import Roles
-from utils import shuffle_list
+from shared import Roles
+from shared import shuffle_list
 import threading
 import socketserver
 import os
@@ -154,8 +154,6 @@ class WerewolfModeratorServer(socketserver.ThreadingMixIn, socketserver.TCPServe
         removed_player = [player for player in self.active_players if player['name'] == player_name][0]
         removed_player['socket'].send(f'ELIMINATED|'.encode())
         self.active_players = [player for player in self.active_players if player != removed_player]
-
-        
 
     def check_game_over(self):
         num_werewolves = len([player for player in self.active_players if player['role'] == Roles.WEREWOLF])
