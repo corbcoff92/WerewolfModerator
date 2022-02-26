@@ -14,6 +14,7 @@ class WerewolfModeratorServer(socket.socket):
         super().__init__(socket.AF_INET, socket.SOCK_STREAM)
         self.clients = []
         self.active_players = []
+        self.responses = []
         self.done = False
         self.exit = False
         self.adding_players = False
@@ -41,10 +42,24 @@ class WerewolfModeratorServer(socket.socket):
                 }
                 self.clients.append(client)
                 conn.send("Welcome to Werewolf, please wait for all of the players to join...".encode())
+                receiving_thread = threading.Thread(target=self.receive_responses, args=(conn,))
+                receiving_thread.daemon = True
+                receiving_thread.start()
+
             else:
                 conn.send('Game has already begun...'.encode())
                 conn.close()
     
+    def receive_responses(self, conn):
+        while True:
+            response = conn.recv(4096).decode().strip()
+
+            if not response:
+                break
+
+            self.responses.append(response)
+
+
     def accept_players(self):
         self.adding_players = True
         while self.adding_players and not self.exit:
@@ -64,8 +79,8 @@ class WerewolfModeratorServer(socket.socket):
                 self.exit = True
                 self.close()
 
-    def broadcast(self, msg):
-        for client in self.clients:
+    def broadcast(self, clients, msg):
+        for client in clients:
             client['socket'].send(msg.encode())
         
     def begin(self):
@@ -93,15 +108,21 @@ class WerewolfModeratorServer(socket.socket):
         shuffle_list(self.active_players)
         for client in self.clients:
             client['socket'].send(client['role'].value.encode())
-            
+
+    def wait_for_responses(self):
+        while len(self.responses) < len(self.active_players):
+            pass
+
     def day(self):
+        self.responses = []
         encoded_players = ','.join([f'{player["name"]}:{player["role"]}' for player in self.active_players])
-        votes = []
-        for player in self.active_players:
-            player['socket'].send(f'DAY|{encoded_players}'.encode())
-            vote = player['socket'].recv(4096).decode()
-            votes.append(vote)
+        self.broadcast(self.active_players, f'DAY|{encoded_players}')
         
+        os.system('cls')
+        print('Daytime, waiting for responses...')
+        self.wait_for_responses()
+
+        votes = self.responses
         player_with_most_votes = max(votes, key=votes.count)
         if (votes.count(player_with_most_votes) > len(self.active_players) // 2):
             print(f'Server: {player_with_most_votes} has been jailed...')
@@ -111,15 +132,14 @@ class WerewolfModeratorServer(socket.socket):
         self.check_game_over()
 
     def night(self):
+        self.responses = []
         encoded_players = ','.join([f'{player["name"]}:{player["role"]}' for player in self.active_players])
-        selected_players_encoded = []
-        for player in self.active_players:
-            player['socket'].send(f'NIGHT|{encoded_players}'.encode())
-            selected_player_encoded = player['socket'].recv(4096).decode()
-            if selected_player_encoded:
-                selected_players_encoded.append(selected_player_encoded)
+        self.broadcast(self.active_players, f'NIGHT|{encoded_players}')
 
-        selected_players = [player.split('|') for player in selected_players_encoded]
+        print('Night time, waiitng for repsonses')
+        self.wait_for_responses()
+        
+        selected_players = [player.split('|') for player in self.responses]
         saved_players = [selected_player[1] for selected_player in selected_players if selected_player[0] == 'SAVED']
         hunted_players = [selected_player[1] for selected_player in selected_players if selected_player[0] == 'HUNTED']
 
