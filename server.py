@@ -126,7 +126,7 @@ class WerewolfModeratorServer(socket.socket):
         player_with_most_votes = max(votes, key=votes.count)
         if (votes.count(player_with_most_votes) > len(self.active_players) // 2):
             print(f'Server: {player_with_most_votes} has been jailed...')
-            self.active_players = [player for player in self.active_players if player['name'] != player_with_most_votes]
+            self.remove_active_player(player_with_most_votes)
         else:
             print('Server: No player recieved a majority vote...')
         self.check_game_over()
@@ -155,9 +155,16 @@ class WerewolfModeratorServer(socket.socket):
             print(f'Server: {player_hunted} was hunted, but saved...')
         else:
             print(f'Server: {player_hunted} was hunted during the night...')
-            self.active_players = [player for player in self.active_players if player['name'] != player_hunted]
+            self.remove_active_player(player_hunted)
         self.check_game_over()
     
+    def remove_active_player(self, player_name):
+        removed_player = [player for player in self.active_players if player['name'] == player_name][0]
+        removed_player['socket'].send(f'ELIMINATED|'.encode())
+        self.active_players = [player for player in self.active_players if player != removed_player]
+
+        
+
     def check_game_over(self):
         num_werewolves = len([player for player in self.active_players if player['role'] == Roles.WEREWOLF])
         num_villagers = len([player for player in self.active_players if player['role'] != Roles.WEREWOLF])
@@ -173,9 +180,9 @@ class WerewolfModeratorServer(socket.socket):
         else:
             print('Server: The villagers have won!')
 
-        for client in self.clients:
-            client['socket'].send(f'DONE|{werewolves_won}'.encode())
+        self.broadcast(self.clients, f'DONE|{werewolves_won}')
     
 
 if __name__ == '__main__':
     server = WerewolfModeratorServer()
+    server.close()

@@ -38,9 +38,7 @@ class Client(Player):
             print(f'The game is beginning, you are a {self.role}')
             print(f'Wait until day/night begin...')
 
-            receiving_thread = threading.Thread(target=self.receive_from_server)
-            receiving_thread.daemon = True
-            receiving_thread.start()
+            self.receive_from_server()
         else:
             self.socket.close()
 
@@ -58,21 +56,27 @@ class Client(Player):
     def receive_from_server(self):
         while True:
             from_server = self.socket.recv(4096).decode().strip()
-            action, rem = from_server.split('|')
+            
+            if not from_server:
+                break
 
+            action, rem = from_server.split('|')
+            
             if action == 'NIGHT':
                 other_players = self.parse_players(rem)
                 selected_player = self.night(other_players)
                 self.socket.send(selected_player.encode())
-            if action == 'DAY':
+            elif action == 'DAY':
                 other_players = self.parse_players(rem)
                 vote = self.day(other_players)
                 self.socket.send(vote.encode())
+            elif action == 'ELIMINATED':
+                os.system('cls')
+                print('You have been eliminated')
             elif action == 'DONE':
                 werewolves_won = (rem == 'True')
                 self.check_winner(werewolves_won)
-            if not from_server:
-                break
+            
                     
         self.socket.close()
         print('Disconnected from server')
@@ -136,15 +140,6 @@ class Client(Player):
                 print('Invalid selection, please try again...')
         return available_players[selection - 1]        
 
-def wait_for_exit():
-    while True:
-        try:
-            time.sleep(1)
-        except KeyboardInterrupt:
-            print('Exiting...')
-            break
-
 if __name__ == "__main__":
     client = Client()
     client.connect_to_server()
-    wait_for_exit()
