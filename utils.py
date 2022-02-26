@@ -1,4 +1,14 @@
 from random import randint
+from enum import Enum
+
+class Roles(Enum):
+    VILLAGER = 'VILLAGER'
+    WEREWOLF = 'WEREWOLF'
+    DOCTOR = 'DOCTOR'
+    SEER = 'SEER'
+    
+    def __str__(self):
+        return self.value
 
 def shuffle_list(l):
     num_items = len(l)

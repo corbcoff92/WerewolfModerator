@@ -1,4 +1,4 @@
-from roles import Roles
+from utils import Roles
 from utils import shuffle_list
 import threading
 import socket

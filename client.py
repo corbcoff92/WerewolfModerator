@@ -1,6 +1,6 @@
 import threading
 import time
-from roles import Roles
+from utils import Roles
 import os
 import socket
 
@@ -44,7 +44,7 @@ class Client(Player):
         else:
             self.socket.close()
 
-        
+
 
     def parse_players(self, players_encoded):
         players_encoded_list = players_encoded.split(',')
