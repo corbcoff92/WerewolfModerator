@@ -42,8 +42,6 @@ class Client(Player):
         else:
             self.socket.close()
 
-
-
     def parse_players(self, players_encoded):
         players_encoded_list = players_encoded.split(',')
         other_players = []
@@ -83,8 +81,8 @@ class Client(Player):
 
     def night(self, players):
         os.system('cls')
-        input(f'Client-{self.name}: {self.name}, press enter when you are ready...')
-        print(f'Client-{self.name}: You are a {self.role}')
+        input(f'{self.name}, press enter when you are ready...')
+        print(f'You are a {self.role}')
         if self.role == Roles.VILLAGER:
             print('Please select a random person...')
             self.ask_player(players)
@@ -117,7 +115,7 @@ class Client(Player):
         return player.name
 
     def check_winner(self, werewolves_won):
-        print(f'Client-{self.name}: You were a {self.role}{", and thus a Villager. " if self.role != Roles.WEREWOLF and self.role != Roles.VILLAGER else ". "}', end='')
+        print(f'You were a {self.role}{", and thus a Villager. " if self.role != Roles.WEREWOLF and self.role != Roles.VILLAGER else ". "}', end='')
         if (werewolves_won and self.role == Roles.WEREWOLF) or (not werewolves_won and self.role != Roles.WEREWOLF):
             print('You have won!')
         else:

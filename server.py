@@ -1,7 +1,7 @@
 from utils import Roles
 from utils import shuffle_list
 import threading
-import socket
+import socketserver
 import os
 
 
@@ -9,65 +9,57 @@ ROLES_TO_ASSIGN = [Roles.WEREWOLF, Roles.DOCTOR, Roles.SEER]
 
 HOST, PORT = 'localhost', 55555    
 
-class WerewolfModeratorServer(socket.socket):
+class WerewolfModeratorRequestHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        name = self.request.recv(4096).decode()
+        if self.server.adding_players:
+            client = {
+                'name': name,
+                'socket': self.request,
+                'role': Roles.VILLAGER
+            }
+            self.server.add_client(client)
+            self.request.send("Welcome to Werewolf, please wait for all of the players to join...".encode())
+            while True:
+                response = self.request.recv(4096).decode().strip()
+
+                if not response:
+                    break
+
+                self.server.responses.append(response)
+        else:
+            self.request.send('Game has already begun...'.encode())
+
+
+class WerewolfModeratorServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     def __init__(self):
-        super().__init__(socket.AF_INET, socket.SOCK_STREAM)
+        super().__init__((HOST, PORT), WerewolfModeratorRequestHandler)
         self.clients = []
         self.active_players = []
         self.responses = []
         self.done = False
         self.exit = False
         self.adding_players = False
-
         self.start_server()
         self.accept_players()
     
     def start_server(self):
         print(f'Server listening on {HOST}:{PORT}')
-        self.bind((HOST, PORT))
-        self.listen(5)            
         server_thread = threading.Thread(target=self.serve_forever)
         server_thread.daemon = True
-        server_thread.start()
+        server_thread.start()                
 
-    def serve_forever(self):
-        while True:
-            conn, adr = self.accept()
-            if self.adding_players:
-                name = conn.recv(4096).decode()
-                client = {
-                    'name': name,
-                    'socket': conn,
-                    'role': Roles.VILLAGER
-                }
-                self.clients.append(client)
-                conn.send("Welcome to Werewolf, please wait for all of the players to join...".encode())
-                receiving_thread = threading.Thread(target=self.receive_responses, args=(conn,))
-                receiving_thread.daemon = True
-                receiving_thread.start()
-
-            else:
-                conn.send('Game has already begun...'.encode())
-                conn.close()
-    
-    def receive_responses(self, conn):
-        while True:
-            response = conn.recv(4096).decode().strip()
-
-            if not response:
-                break
-
-            self.responses.append(response)
+    def add_client(self, client):
+        print(f'\n{client["name"]} joined...')
+        self.clients.append(client)
 
 
     def accept_players(self):
         self.adding_players = True
         while self.adding_players and not self.exit:
-            print(f'Current Players: {[client["name"] for client in self.clients]}')
             selection = int(input('\t1. Begin\n\t2. Exit\nPlease make a selection: '''))    
             if selection == 1:
-                # if len(self.clients) >= len(ROLES_TO_ASSIGN) + 2:
-                if len(self.clients) >= 1:
+                if len(self.clients) >= len(ROLES_TO_ASSIGN) + 1:
                     self.adding_players = False
                     self.active_players = list(self.clients)
                     self.assign_roles()
@@ -77,7 +69,7 @@ class WerewolfModeratorServer(socket.socket):
             elif selection == 2:
                 self.adding_players = False
                 self.exit = True
-                self.close()
+                self.shutdown()
 
     def broadcast(self, clients, msg):
         for client in clients:
@@ -125,10 +117,10 @@ class WerewolfModeratorServer(socket.socket):
         votes = self.responses
         player_with_most_votes = max(votes, key=votes.count)
         if (votes.count(player_with_most_votes) > len(self.active_players) // 2):
-            print(f'Server: {player_with_most_votes} has been jailed...')
+            print(f'{player_with_most_votes} has been jailed...')
             self.remove_active_player(player_with_most_votes)
         else:
-            print('Server: No player recieved a majority vote...')
+            print('No player recieved a majority vote...')
         self.check_game_over()
 
     def night(self):
@@ -152,9 +144,9 @@ class WerewolfModeratorServer(socket.socket):
             player_hunted = max(hunted_players, key=hunted_players.count)
 
         if player_saved == player_hunted:
-            print(f'Server: {player_hunted} was hunted, but saved...')
+            print(f'{player_hunted} was hunted, but saved...')
         else:
-            print(f'Server: {player_hunted} was hunted during the night...')
+            print(f'{player_hunted} was hunted during the night...')
             self.remove_active_player(player_hunted)
         self.check_game_over()
     
@@ -176,13 +168,13 @@ class WerewolfModeratorServer(socket.socket):
     def game_over(self, werewolves_won):
         self.done = True
         if werewolves_won:
-            print('Server: The werewolves have won!')
+            print('The werewolves have won!')
         else:
-            print('Server: The villagers have won!')
+            print('The villagers have won!')
 
         self.broadcast(self.clients, f'DONE|{werewolves_won}')
     
 
 if __name__ == '__main__':
     server = WerewolfModeratorServer()
-    server.close()
+    server.shutdown()
