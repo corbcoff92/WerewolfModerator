@@ -1,6 +1,6 @@
 import threading
 import time
-from shared import Roles
+from shared import Roles, WerewolfModeratorClientRolesDisplay, WerewolfModeratorSelectableClientDisplay
 import socket
 import tkinter as tk
 from tkinter.messagebox import askyesno, showerror, showinfo
@@ -25,9 +25,7 @@ class WerewolfModeratorClientJoinFrame(tk.Frame):
     def connect_to_server(self):
         name = self.name_ent.get()
         if name:
-            self.name_ent.unbind('<Return>')
             server_thread = threading.Thread(target=self.client.connect_to_server, args=(name,))
-            server_thread.daemon = True
             server_thread.start()
         else:
             showerror(title='Invalid Name', message='Name cannot be blank, try again...')
@@ -35,58 +33,7 @@ class WerewolfModeratorClientJoinFrame(tk.Frame):
     def connected(self):
         self.name_ent.config(state=tk.DISABLED)
         self.connect_btn.config(state=tk.DISABLED)
-
-
-class WerewolfClientDisplay(tk.Frame):
-    def __init__(self, frame):
-        super().__init__(master=frame)
-
-        self.clients = []
-
-        self.selection_frame = tk.Frame(master=self)
-        self.clients_lb = tk.Listbox(master=self.selection_frame, selectmode=tk.SINGLE, width=40, height=10)
-        self.clients_lb.pack(side=tk.TOP)
-        self.scroll_bar = tk.Scrollbar(master=self)
-        self.scroll_bar.config(command=self.clients_lb.yview)
-        self.scroll_bar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.clients_lb.config(yscrollcommand=self.scroll_bar.set)
-        self.selection_frame.pack(side=tk.TOP)
-    
-    def update(self, clients, excluded_clients=[]):
-        self.clients = clients
-        self.clients_lb.config(state=tk.NORMAL)
-        self.clients_lb.delete(0, tk.END)
-        self.clients = [client for client in self.clients if client.name not in excluded_clients]
-        self.clients_lb.insert(tk.END, *[client.name for client in self.clients])
-
-class WerewolfClientDisplayRoles(WerewolfClientDisplay):
-    def __init__(self, frame):
-        super().__init__(frame)
-    
-    def update(self, clients):
-        self.clients_lb.delete(0, tk.END)
-        villagers = [client for client in clients if client.role != Roles.WEREWOLF]
-        werewolves = [client for client in clients if client.role == Roles.WEREWOLF]
-        self.clients_lb.insert(tk.END, f'-------------- VILLAGERS ---------------')
-        self.clients_lb.insert(tk.END, *[f'{client.name} : {client.role}' for client in villagers])
-        self.clients_lb.insert(tk.END, f'-------------- WEREWOLVES --------------')
-        self.clients_lb.insert(tk.END, *[f'{client.name} : {client.role}' for client in werewolves])
-        
-
-class WerewolfSelectableClientDisplay(WerewolfClientDisplay):
-    def __init__(self, frame, client):
-        super().__init__(frame)
-        self.client = client
-        self.select_btn = tk.Button(master=self, text='Select', command=self.select_client)
-        self.select_btn.pack()
-    
-    def select_client(self):
-        selection = self.clients_lb.curselection()
-        if selection:
-            idx = selection[0]
-            self.client.selected_player = self.clients[idx]
-        else:
-            showerror(title='No Selection', message='You must select an item...')
+        self.name_ent.unbind('<Return>')        
 
 class WerewolfGameOverClientDisplay(tk.Frame):
     def __init__(self, window):
@@ -95,7 +42,7 @@ class WerewolfGameOverClientDisplay(tk.Frame):
         self.role_lbl.pack(side=tk.TOP)
         self.winning_lbl = tk.Label(master=self, text='')
         self.winning_lbl.pack(side=tk.TOP)
-    
+            
     def display(self, role, werewolves_won):
         self.role_lbl['text'] = f'You were a {role}{", and thus a Villager. " if role != Roles.WEREWOLF and role != Roles.VILLAGER else ". "}'
         if (werewolves_won and role == Roles.WEREWOLF) or (not werewolves_won and role != Roles.WEREWOLF):
@@ -106,8 +53,6 @@ class WerewolfGameOverClientDisplay(tk.Frame):
 class WerewolfModeratorEliminationFrame(tk.Frame):
     def __init__(self, window):
         super().__init__(master=window)
-    
-    def display(self):
         tk.Label(master=self, text= f'You have been eliminated').pack()
         tk.Label(master=self, text='Please do not disclose your role...').pack(side=tk.TOP)
         tk.Label(master=self, text='All roles will be displayed when the game is over...').pack(side=tk.TOP)
@@ -123,23 +68,26 @@ class WerewolfModeratorPlayerSelectionFrame(tk.Frame):
         self.selection_lbl = tk.Label(master=self, text='')
         self.selection_lbl.pack(side=tk.TOP)
 
-        self.client_display = WerewolfSelectableClientDisplay(self, client)
+        self.client_display = WerewolfModeratorSelectableClientDisplay(self, client)
         self.client_display.pack(side=tk.TOP)
     
-    def update(self, clients, excluded_clients=[]):
-        self.client_display.update(clients, excluded_clients=excluded_clients)    
+    def update(self, client_names, excluded_clients=[]):
+        self.client_display.update(client_names, excluded_clients=excluded_clients)    
 
 class Player:
     def __init__(self, name=None, role=None):
         self.name = name
         self.role = role
     
+    def as_dict(self):
+        return {'name':self.name, 'role':self.role}
+    
 class Client(socket.socket, Player):
     def __init__(self):
         Player.__init__(self)
-        socket.socket.__init__(self, socket.AF_INET, socket.SOCK_STREAM)
 
         self.window = tk.Tk()
+        self.window.title('Werewolf')
         self.window.resizable(False, False)
         self.window.geometry('300x300')
         self.window.protocol('WM_DELETE_WINDOW', self.on_close)
@@ -148,6 +96,7 @@ class Client(socket.socket, Player):
         self.join_frame.pack(side=tk.TOP)
         self.role_lbl = tk.Label(master=self.window, text='Enter your name and click to join the server...')
         self.role_lbl.pack(side=tk.TOP)
+
         self.main_frame = tk.Frame(master=self.window)
         self.main_message_lbl = tk.Label(master=self.main_frame, text='')
         self.main_message_lbl.pack(side=tk.TOP)
@@ -172,31 +121,28 @@ class Client(socket.socket, Player):
             self.close()
 
     def begin(self):
-        self.display_frame(self.join_frame)
+        self.display_frame(self.main_frame)
         self.window.mainloop()
     
     def connect_to_server(self, name):
         self.name = name
         try:
+            socket.socket.__init__(self, socket.AF_INET, socket.SOCK_STREAM)
             self.connect((HOST, PORT))
             self.send(self.name.encode())
-        except Exception:
+        except Exception as e:
+            print(e)
             showerror(title='Unable to Connect to Server', message='Unable to connect to the server, please try again later...')
         else:
-            self.join_frame.connected()
-            msg = self.recv(4096).decode()
-            self.role_lbl['text'] = 'Welome to Werewolf'
-            self.main_message_lbl['text'] = 'Roles will be assigned when game begins...'
-            role = self.recv(4096).decode()
-            if role:
-                self.role = Roles(role)
-                self.main_message_lbl['text'] = f'The game is beginning...\nNo action required until day or night begin...'
-                self.role_lbl['text'] = f'Role: {self.role}'
+            accepted, msg = self.recv(4096).decode().split('|')
+            if accepted == 'True':
+                self.join_frame.connected()
+                self.role_lbl['text'] = 'Welcome to Werewolf'
+                self.main_message_lbl['text'] = msg
                 self.receive_from_server()
             else:
+                self.main_message_lbl['text'] = msg
                 self.close()
-
-        
 
     def parse_players(self, players_encoded):
         players_encoded_list = players_encoded.split(',')
@@ -216,7 +162,13 @@ class Client(socket.socket, Player):
 
             action, rem = from_server.split('|')
             
-            if action == 'NIGHT':
+            if action == 'ROLE':
+                role = rem
+                self.role = Roles(role)
+                self.main_message_lbl['text'] = f'The game is beginning...\nNo action required until day or night begin...'
+                self.role_lbl['text'] = f'Role: {self.role}'
+                self.display_frame(self.main_frame)
+            elif action == 'NIGHT':
                 self.selected_player = []
                 players = self.parse_players(rem)
                 self.night(players)
@@ -225,10 +177,15 @@ class Client(socket.socket, Player):
                 players = self.parse_players(rem)
                 self.day(players)
             elif action == 'ELIMINATED':
-                self.eliminated_frame.display()
+                self.role_lbl['text'] = 'ELIMINATED'
                 self.display_frame(self.eliminated_frame)
+            elif action == 'NOT_ELIMINATED':
+                msg = rem
+                self.main_message_lbl['text'] = f'{msg}\nNo other action required until day or night...'
             elif action == 'DONE':
                 werewolves_won = (rem == 'True')
+                self.role_lbl['text'] = 'Game Over'
+                self.main_message_lbl['text'] = f'{"Werewolves" if werewolves_won else "Villagers"} have won!'
                 self.gameover_frame.display(self.role, werewolves_won)
                 self.display_frame(self.gameover_frame)
         self.close()
@@ -252,7 +209,7 @@ class Client(socket.socket, Player):
             excluded_players = [self.name]
 
 
-        self.player_select_frame.update(players, excluded_players)
+        self.player_select_frame.update([player.name for player in players], excluded_players)
         self.display_frame(self.player_select_frame)
         self.wait_select_player()
         self.main_message_lbl['text'] = f'Waiting for other players to respond...'
@@ -260,33 +217,34 @@ class Client(socket.socket, Player):
 
         try:
             if self.role == Roles.VILLAGER:
-                self.send(f'NONE|{self.selected_player.name}'.encode())
-                showinfo(title='Selection Sent', message='Your selection has been sent...')
+                showinfo(title='Send Selection', message='Sending selection to server...')
+                self.send(f'NONE|{self.selected_player}'.encode())
             elif self.role == Roles.WEREWOLF:
-                self.send(f'HUNTED|{self.selected_player.name}'.encode())
-                showinfo(title='Selection Sent', message='Your selection has been sent...')
+                showinfo(title='Send Selection', message='Sending selection to server...')
+                self.send(f'HUNTED|{self.selected_player}'.encode())
             elif self.role == Roles.DOCTOR:
-                self.send(f'SAVED|{self.selected_player.name}'.encode())
-                showinfo(title='Selection Sent', message='Your selection has been sent...')
+                showinfo(title='Send Selection', message='Sending selection to server...')
+                self.send(f'SAVED|{self.selected_player}'.encode())
             elif self.role == Roles.SEER:
-                werewolf_found = self.selected_player.role == Roles.WEREWOLF
-                self.send(f'NONE|{self.selected_player.name}'.encode())
-                showinfo(title=f'{"Werewolf" if werewolf_found else "Villager"} Identified', message=f'{self.selected_player.name} {"is NOT" if not werewolf_found else "IS"} a Werewolf...')
+                selected_player_role = next((player.role for player in players if player.name == self.selected_player)) 
+                werewolf_found = selected_player_role == Roles.WEREWOLF
+                showinfo(title=f'{"Werewolf" if werewolf_found else "Villager"} Identified', message=f'{self.selected_player} {"is NOT" if not werewolf_found else "IS"} a Werewolf...')
+                self.send(f'NONE|{self.selected_player}'.encode())
         except Exception as e:
-            showerror(title='Reponse Not Sent')
+            showerror(title='Reponse Not Sent', message=str(e))
             
     
     def day(self, players):
         self.main_message_lbl['text'] = 'Day'
         self.player_select_frame.selection_lbl['text'] = 'Please select a person for trial...'
-        self.player_select_frame.update(players, [self.name])
+        self.player_select_frame.update([player.name for player in players], [self.name])
         
         self.display_frame(self.player_select_frame)
         self.wait_select_player()
         self.main_message_lbl['text'] = f'Waiting for other players to respond...'
         self.display_frame(self.main_frame)
 
-        self.send(self.selected_player.name.encode())
+        self.send(self.selected_player.encode())
 
 
     def wait_select_player(self):
