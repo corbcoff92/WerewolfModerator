@@ -210,7 +210,7 @@ class Client(socket.socket, Player):
         elif self.role == Roles.WEREWOLF:
             werewolves = [player.name for player in players if player.role == Roles.WEREWOLF]
             excluded_players=werewolves
-            self.player_select_frame.message_lbl['text'] += f'\nOther werewolves: {", ".join([werewolf.name for werewolf in werewolves]) if len(werewolves) > 1 else "None"}'
+            self.player_select_frame.message_lbl['text'] += f'\nOther werewolves: {", ".join([werewolf for werewolf in werewolves if werewolf != self.name]) if len(werewolves) > 1 else "None"}'
             self.player_select_frame.selection_lbl['text'] = 'Select the player you would like to hunt...'
         elif self.role == Roles.DOCTOR:
             self.player_select_frame.selection_lbl['text'] = 'Select the player you would like to save...'

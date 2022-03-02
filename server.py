@@ -157,8 +157,7 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         self.adding_players = False
         
         # Frames
-        num_players_required = len(ROLES_TO_ASSIGN) + 1
-        self.accept_clients_frame = AcceptClientsFrame(self, 1)
+        self.accept_clients_frame = AcceptClientsFrame(self, len(ROLES_TO_ASSIGN) + 1)
         self.main_menu = WerewolfModeratorMainMenu(self)
         self.waiting_frame = WerewolfModeratorWaitingFrame(self)
         self.game_over_frame = WerewolfModeratorGameOverFrame(self)
@@ -207,6 +206,10 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
     def assign_roles(self):
         roles_to_assign = list(ROLES_TO_ASSIGN)
+
+        if len(self.active_players) > len(ROLES_TO_ASSIGN) + 2:
+            roles_to_assign.append(Roles.WEREWOLF)
+
         if len(self.active_players) >= 15:
             roles_to_assign.extend([Roles.WEREWOLF]*((len(self.active_players) - 11)//4))
 
