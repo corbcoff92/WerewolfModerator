@@ -19,13 +19,13 @@ class WerewolfModeratorClientDisplay(tk.Frame):
         self.client_names = []
 
         self.clients_frame = tk.Frame(master=self)
-        self.clients_lb = tk.Listbox(master=self.clients_frame, selectmode=tk.SINGLE, width=40, height=10)
-        self.clients_lb.pack(side=tk.TOP)
+        self.clients_lb = tk.Listbox(master=self.clients_frame, selectmode=tk.SINGLE, font=('Consolas', 14), height=5)
+        self.clients_lb.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.scroll_bar = tk.Scrollbar(master=self)
         self.scroll_bar.config(command=self.clients_lb.yview)
         self.scroll_bar.pack(side=tk.RIGHT, fill=tk.Y)
         self.clients_lb.config(yscrollcommand=self.scroll_bar.set)
-        self.clients_frame.pack(side=tk.TOP)
+        self.clients_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
     
     def clear(self):
         self.clients_lb.config(state=tk.NORMAL)
@@ -41,8 +41,6 @@ class WerewolfModeratorSelectableClientDisplay(WerewolfModeratorClientDisplay):
     def __init__(self, frame, werewolf_moderator):
         super().__init__(frame)
         self.werewolf_moderator = werewolf_moderator
-        self.select_btn = tk.Button(master=self, text='Select', command=self.select_client)
-        self.select_btn.pack()
 
     def update(self, client_names, excluded_clients=[]):
         super().update(client_names=client_names, excluded_clients=excluded_clients)
@@ -66,13 +64,16 @@ class WerewolfModeratorClientRolesDisplay(WerewolfModeratorClientDisplay):
         villagers = [client for client in clients if client['role'] != Roles.WEREWOLF]
 
         self.clients_lb.config(state=tk.NORMAL)
-        self.clients_lb.insert(tk.END, '--------------- VILLAGERS --------------\n')
+        max_name_len = len(max(clients, key=lambda client: len(client['name']))['name']) + 2
+        print(max_name_len)
+        self.clients_lb.insert(tk.END, f'{" VILLAGERS ":^25}')
         for client in villagers:
-            self.clients_lb.insert(tk.END, f'{client["name"]}:{client["role"].value.capitalize()}\n')
+            self.clients_lb.insert(tk.END, f'{client["name"].ljust(max_name_len)}{client["role"].value.capitalize()}')
         
-        self.clients_lb.insert(tk.END, '-------------- WEREWOLVES --------------\n')
+        self.clients_lb.insert(tk.END, f'{" WEREWOLVES ":^25}\n')
+
         for client in werewolves:
-            self.clients_lb.insert(tk.END, f'{client["name"]} : {client["role"].value.capitalize()}\n')
+            self.clients_lb.insert(tk.END, f'{client["name"].ljust(max_name_len)}{client["role"].value.capitalize()}')
         self.clients_lb.config(state=tk.DISABLED)
 
 def shuffle_list(l):
