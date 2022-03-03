@@ -13,7 +13,7 @@ HOST, PORT = 'localhost', 55555
 
 class WerewolfModeratorRequestHandler(socketserver.BaseRequestHandler):
     def handle(self):
-        name = self.request.recv(4096).decode()
+        name = self.request.recv(4096).decode().strip()
         if self.server.adding_players:
             if name not in [client['name'] for client in self.server.clients]:
                 client = {

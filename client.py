@@ -23,7 +23,7 @@ class WerewolfModeratorClientJoinFrame(tk.Frame):
         self.name_frame.pack(side=tk.TOP)
     
     def connect_to_server(self):
-        name = self.name_ent.get()
+        name = self.name_ent.get().strip()
         if 1 <= len(name) <= 15:
             self.client.connect_to_server(name)
         else:
@@ -143,7 +143,7 @@ class Client(socket.socket, Player):
             print(e)
             showerror(title='Unable to Connect to Server', message='Unable to connect to the server, please try again later...')
         else:
-            accepted, msg = self.recv(4096).decode().split('|')
+            accepted, msg = self.recv(4096).decode().strip().split('|')
             if accepted == 'True':
                 self.join_frame.connected()
                 self.role_lbl['text'] = 'Welcome to Werewolf'
