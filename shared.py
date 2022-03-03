@@ -3,6 +3,10 @@ from enum import Enum
 import tkinter as tk
 from tkinter.messagebox import showerror
 
+
+HOST, PORT = 'localhost', 55555
+
+
 class Roles(Enum):
     VILLAGER = 'VILLAGER'
     WEREWOLF = 'WEREWOLF'
@@ -12,10 +16,10 @@ class Roles(Enum):
     def __str__(self):
         return self.value
 
+
 class WerewolfModeratorClientDisplay(tk.Frame):
     def __init__(self, frame):
         super().__init__(master=frame)
-
         self.client_names = []
 
         self.clients_frame = tk.Frame(master=self)
@@ -37,6 +41,7 @@ class WerewolfModeratorClientDisplay(tk.Frame):
         self.clients_lb.insert(tk.END, *[name for name in self.client_names])
         self.clients_lb.config(state=tk.DISABLED)
 
+
 class WerewolfModeratorSelectableClientDisplay(WerewolfModeratorClientDisplay):
     def __init__(self, frame, werewolf_moderator):
         super().__init__(frame)
@@ -54,27 +59,31 @@ class WerewolfModeratorSelectableClientDisplay(WerewolfModeratorClientDisplay):
         else:
             showerror(title='No Selection', message='You must select an item...')
 
+
 class WerewolfModeratorClientRolesDisplay(WerewolfModeratorClientDisplay):
     def __init__(self, frame):
         super().__init__(frame)
         
     def update(self, clients):
         self.clear()
+
         werewolves = [client for client in clients if client['role'] == Roles.WEREWOLF]
         villagers = [client for client in clients if client['role'] != Roles.WEREWOLF]
 
         self.clients_lb.config(state=tk.NORMAL)
+ 
         max_name_len = len(max(clients, key=lambda client: len(client['name']))['name']) + 2
-        print(max_name_len)
+        
         self.clients_lb.insert(tk.END, f'{" VILLAGERS ":^25}')
         for client in villagers:
             self.clients_lb.insert(tk.END, f'{client["name"].ljust(max_name_len)}{client["role"].value.capitalize()}')
         
         self.clients_lb.insert(tk.END, f'{" WEREWOLVES ":^25}\n')
-
         for client in werewolves:
             self.clients_lb.insert(tk.END, f'{client["name"].ljust(max_name_len)}{client["role"].value.capitalize()}')
+
         self.clients_lb.config(state=tk.DISABLED)
+
 
 def shuffle_list(l):
     num_items = len(l)
