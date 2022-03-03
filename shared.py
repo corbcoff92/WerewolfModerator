@@ -1,6 +1,6 @@
 from enum import Enum
-from random import randint
 import tkinter as tk
+
 
 # IP address & port number for server & clients
 HOST, PORT = 'localhost', 55555
@@ -128,21 +128,3 @@ class WerewolfModeratorClientRolesDisplay(WerewolfModeratorClientDisplay):
 
         # Disable selectability of clients display
         self.clients_lb.config(state=tk.DISABLED)
-
-
-def shuffle_list(list_to_shuffle: list) -> None:
-    """ 
-    Shuffles the given list in-place.
-
-    List is shuffled by swapping each item with a randomly selected item,
-    which is repreated five times.
-
-    Arguments:
-        list_to_shuffle: list
-            List that is to be shuffled in-place.
-    """
-    num_items = len(list_to_shuffle)
-    for _ in range(5):
-        for item in list_to_shuffle:
-            idx = randint(0, num_items - 1)
-            list_to_shuffle.append(list_to_shuffle.pop(idx))

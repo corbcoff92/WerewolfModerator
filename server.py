@@ -1,11 +1,12 @@
+from random import shuffle
+import socket
+import socketserver
 import threading
 import time
 import tkinter as tk
 from tkinter.messagebox import askyesno, showerror, showinfo
-import socket
-import socketserver
 
-from shared import HOST, PORT, Roles, WerewolfModeratorClientDisplay, WerewolfModeratorClientRolesDisplay, shuffle_list
+from shared import HOST, PORT, Roles, WerewolfModeratorClientDisplay, WerewolfModeratorClientRolesDisplay
 
 
 # Minimum "special" roles to assign each game of werewolf
@@ -238,8 +239,8 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
             roles_to_assign.extend([Roles.WEREWOLF]*((len(self.active_players) - 11)//4))
 
         # Shuffle lists to randomize role assignment
-        shuffle_list(roles_to_assign)
-        shuffle_list(self.active_players)
+        shuffle(roles_to_assign)
+        shuffle(self.active_players)
 
         # Assign roles to each player
         for player in self.active_players:
@@ -249,7 +250,7 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
                 player['role'] = Roles.VILLAGER
         
         # Shuffle lists before sending to client to further secretize roles
-        shuffle_list(self.active_players)
+        shuffle(self.active_players)
         
         # Send assigned werewolf role to each client
         for client in self.clients:
