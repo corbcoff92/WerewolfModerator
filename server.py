@@ -136,12 +136,14 @@ class WerewolfModeratorRequestHandler(socketserver.BaseRequestHandler):
 
 
 class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
     def __init__(self):
         self.clients = []
         self.active_players = []
         self.clients_responded = []
         self.responses = []
         self.done = False
+        self.exiting = False
         self.adding_players = False
 
         self.window = tk.Tk()
@@ -185,10 +187,11 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         removed_client = next((current_client for current_client in self.clients if current_client['name'] == client['name']))
         self.clients.remove(removed_client)
 
-        if self.adding_players or self.game_over:
-            self.accept_clients_frame.update([client['name'] for client in self.clients])
-        else:
-            self.remove_active_player(removed_client['name'])
+        if not self.exiting:
+            if self.adding_players or self.done:
+                self.accept_clients_frame.update([client['name'] for client in self.clients])
+            else:
+                self.remove_active_player(removed_client['name'])
     
     def remove_active_player(self, player_name):
         try:
@@ -199,6 +202,7 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
             showerror(title='Player disconnected', message=f'{player_name} has been disconnected from the server...')
     
     def begin(self):
+        self.done = False
         self.adding_players = False
         self.active_players = list(self.clients)
         self.display_frame_window(self.main_menu)
@@ -323,6 +327,7 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
             self.exit()
 
     def exit(self):
+        self.exiting = True
         for client in self.clients:
             client['socket'].shutdown(socket.SHUT_WR)
         self.window.destroy()
