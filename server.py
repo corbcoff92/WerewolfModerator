@@ -304,7 +304,7 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         removed_client = next((current_client for current_client in self.clients if current_client['name'] == client['name']))
         self.clients.remove(removed_client)
 
-        if self.adding_players:
+        if self.adding_players or self.game_over:
             self.accept_clients_frame.update([client['name'] for client in self.clients])
         else:
             self.active_players.remove(removed_client)
