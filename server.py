@@ -1,12 +1,14 @@
-import socket
-import time
-from shared import HOST, PORT, Roles, WerewolfModeratorClientDisplay, WerewolfModeratorClientRolesDisplay, shuffle_list
 import threading
-import socketserver
+import time
 import tkinter as tk
 from tkinter.messagebox import askyesno, showerror, showinfo
+import socket
+import socketserver
+
+from shared import HOST, PORT, Roles, WerewolfModeratorClientDisplay, WerewolfModeratorClientRolesDisplay, shuffle_list
 
 
+# Minimum "special" roles to assign each game of werewolf
 ROLES_TO_ASSIGN = [Roles.WEREWOLF, Roles.DOCTOR, Roles.SEER]            
 
 
@@ -21,26 +23,34 @@ class WerewolfModeratorRequestHandler(socketserver.BaseRequestHandler):
         Any new socket connection request recieved while a game of werewolf is already in progress is rejected with a 
         message indicating as such.
         """
+        # Receive client name
         name = self.request.recv(4096).decode().strip()
+        # Check that server is accepting clients
         if self.server.adding_players:
+            # Check that name is unique
             if name not in [client['name'] for client in self.server.clients]:
                 client = {
                     'name': name,
                     'socket': self.request,
                     'role': Roles.VILLAGER
                 }
+                # Add client to server's clients list
                 self.server.add_client(client)
                 self.request.send(f"{True}|Roles will be assigned when game begins...".encode())
+                # Receive data from client until socket is closed by the client
                 while True:
                     response = self.request.recv(4096).decode().strip()
-
+                    
+                    # Check if socket has been closed by the client
                     if not response:
                         break
 
+                    # Add response to server's clients' responses list
                     self.server.responses.append(response)
                     self.server.clients_responded.append(client)
                     self.server.waiting_frame.update()
                 
+                # Socket has been closed by the client
                 self.server.remove_client(client)
                 self.request.shutdown(socket.SHUT_WR)
             else:
@@ -73,18 +83,21 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         self.exiting = False
         self.adding_players = False
 
+        # Root Tk Window
         self.window = tk.Tk()
         self.window.title('Werewolf Moderator')
         self.window.resizable(False, False)
         self.window.geometry("300x300")
         self.window.protocol('WM_DELETE_WINDOW', self.ask_close)
         
+        # Display Frames
         self.accept_clients_frame = AcceptClientsFrame(self, len(ROLES_TO_ASSIGN) + 1)
         self.main_menu = WerewolfModeratorMainMenu(self)
         self.waiting_frame = WerewolfModeratorWaitingFrame(self)
         self.game_over_frame = WerewolfModeratorGameOverFrame(self)
         self.frames = [self.accept_clients_frame, self.main_menu, self.waiting_frame, self.game_over_frame]
 
+        # Begin Serving
         self.start_server()
         self.accept_clients()
 
@@ -112,7 +125,10 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         This process continues indefinitely until it is eplicitly stopped. 
         This process is executed in a new thread.
         """
+        # Initialize ThreadedTCPServer
         super().__init__((HOST, PORT), WerewolfModeratorRequestHandler)
+        
+        # Serve indefinitely using separate thread
         server_thread = threading.Thread(target=self.serve_forever)
         server_thread.daemon = True
         server_thread.start()
@@ -162,7 +178,9 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         removed_client = next((current_client for current_client in self.clients if current_client['name'] == client['name']))
         self.clients.remove(removed_client)
 
+        # If exiting, clients have alredy been removed
         if not self.exiting:
+            # If game of werewolf is not in progress, clients do not need to be removed from active players list
             if self.adding_players or self.done:
                 self.accept_clients_frame.update([client['name'] for client in self.clients])
             else:
@@ -180,6 +198,7 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
             player_name: str
                 Name of the player that is to be removed from the currently active players list.
         """
+        # If the client has been diconnected, the player will not be found in the active players list
         try:
             removed_player = next((player for player in self.active_players if player['name'] == player_name))
             removed_player['socket'].send(f'ELIMINATED|'.encode())
@@ -212,22 +231,27 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         """
         roles_to_assign = list(ROLES_TO_ASSIGN)
 
+        # Add additional werewolves if needed
         if len(self.active_players) > len(ROLES_TO_ASSIGN) + 2:
             roles_to_assign.append(Roles.WEREWOLF)
-
         if len(self.active_players) >= 15:
             roles_to_assign.extend([Roles.WEREWOLF]*((len(self.active_players) - 11)//4))
 
+        # Shuffle lists to randomize role assignment
         shuffle_list(roles_to_assign)
         shuffle_list(self.active_players)
 
+        # Assign roles to each player
         for player in self.active_players:
             if roles_to_assign:
                 player['role'] = roles_to_assign.pop()
             else:
                 player['role'] = Roles.VILLAGER
         
+        # Shuffle lists before sending to client to further secretize roles
         shuffle_list(self.active_players)
+        
+        # Send assigned werewolf role to each client
         for client in self.clients:
             client['socket'].send(f'ROLE|{client["role"].value}'.encode())
 
@@ -258,18 +282,22 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         self.responses = []
         self.clients_responded = []
         
+        # Send active players list to each of the active players
         encoded_players = ','.join([f'{player["name"]}:{player["role"]}' for player in self.active_players])
         self.broadcast(self.active_players, f'NIGHT|{encoded_players}')
         
+        # Wait for all responses
         self.waiting_frame.main_lbl['text'] = 'Night...'
         self.waiting_frame.update()
         self.display_frame_window(self.waiting_frame)
         self.wait_for_responses()
         
+        # Parse selected players lists
         selected_players = [player.split('|') for player in self.responses]
         saved_players = [selected_player[1] for selected_player in selected_players if selected_player[0] == 'SAVED']
         hunted_players = [selected_player[1] for selected_player in selected_players if selected_player[0] == 'HUNTED']
 
+        # Determine saved & hunted players
         if saved_players:
             player_saved = max(saved_players, key=saved_players.count)
         else:
@@ -280,6 +308,7 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         else:
             player_hunted = None
 
+        # If werewolves have been disconnected, hunted player will be empty
         if player_hunted:
             if player_saved == player_hunted:
                 showinfo(title='No Player Eliminated', message=f'{player_hunted} was hunted, but saved...')
@@ -303,16 +332,21 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         self.responses = []
         self.clients_responded = []
         
+        # Send active players list to each of the active players
         encoded_players = ','.join([f'{player["name"]}:{player["role"]}' for player in self.active_players])
         self.broadcast(self.active_players, f'DAY|{encoded_players}')
         
+        # Wait for all responses
         self.waiting_frame.main_lbl['text'] = 'Day...'
         self.waiting_frame.update()
         self.display_frame_window(self.waiting_frame)
         self.wait_for_responses()
 
+        # Tally votes
         votes = self.responses
         player_with_most_votes = max(votes, key=votes.count)
+
+        # Individual player must receive a majority of the votes to be jailed
         if (votes.count(player_with_most_votes) > len(self.active_players) // 2):
             showinfo(title='Player Eliminated', message=f'{player_with_most_votes} has been jailed...')
             self.remove_active_player(player_with_most_votes)
@@ -332,8 +366,10 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         that the number of remaining werewolves equals the number of remaining villagers, or that
         all of the werewolves have been eliminated.
         """
+        # Determine number of werewolves and villagers remaining
         num_werewolves = len([player for player in self.active_players if player['role'] == Roles.WEREWOLF])
         num_villagers = len([player for player in self.active_players if player['role'] != Roles.WEREWOLF])
+
         if num_villagers <= num_werewolves:
             self.game_over(True)
         elif num_werewolves <= 0:
@@ -353,11 +389,15 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
                 Should be True if the werewolves won, False otherwise.
         """
         self.done = True
+
+        # Send results to all currently connected clients
         self.broadcast(self.clients, f'DONE|{werewolves_won}')
         
+        # Display each currently connected client's name and respective werewolf role
         self.game_over_frame.update(self.clients, werewolves_won)
         self.display_frame_window(self.game_over_frame)
         
+        # Display results
         if werewolves_won:
             showinfo(title='Game Over', message='The werewolves have won!')
         else:
@@ -382,11 +422,18 @@ class WerewolfModerator(socketserver.ThreadingMixIn, socketserver.TCPServer):
         client socket connections are shutdown, and the root Tk GUI window is destroyed.
         """
         self.exiting = True
+
+        # Terminate each individual connected client socket
         for client in self.clients:
             client['socket'].shutdown(socket.SHUT_WR)
+
+        # Terminate GUI
         self.window.destroy()
 
 
+################################################################################################################
+#                                                    FRAMES                                                    #
+################################################################################################################
 class AcceptClientsFrame(tk.Frame):
     """ 
     Tkinter frame containing elements for accepting new clients and beginning a game of werewolf. 
@@ -410,19 +457,17 @@ class AcceptClientsFrame(tk.Frame):
         """
         super().__init__(master=server.window)
         self.num_clients_required_to_begin = num_clients_required_to_begin
+        
+        # Connection Label
+        tk.Label(master=self, text=f'Connected Players').pack(side=tk.TOP)
 
-        self.top_frame = tk.Frame(master=self)
-        self.connection_lbl = tk.Label(master=self.top_frame, text=f'Connected Players')
-        self.connection_lbl.pack(side=tk.TOP)
-        self.top_frame.pack(side=tk.TOP)
-
+        # Clients display
         self.connected_clients_display = WerewolfModeratorClientDisplay(self)
         self.connected_clients_display.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        self.bottom_frame = tk.Frame(master=self)
-        self.begin_game_btn = tk.Button(master=self.bottom_frame, text='Begin Game', state=tk.DISABLED, command=server.begin)
-        self.begin_game_btn.pack()
-        self.bottom_frame.pack(side=tk.BOTTOM, pady=(10,0))
+        # Begin button
+        self.begin_game_btn = tk.Button(master=self, text='Begin Game', state=tk.DISABLED, command=server.begin)
+        self.begin_game_btn.pack(side=tk.BOTTOM, pady=(10,0))
     
     def update(self, clients: list[str]) -> None:
         """
@@ -437,6 +482,8 @@ class AcceptClientsFrame(tk.Frame):
                 List conataining client names to be displayed.
         """
         self.connected_clients_display.update(clients)
+
+        # Enable/disable begin button
         if len(clients) >= self.num_clients_required_to_begin:
             self.begin_game_btn.config(state=tk.NORMAL)
         else:
@@ -463,15 +510,19 @@ class WerewolfModeratorMainMenu(tk.Frame):
         super().__init__(master=werewolf_moderator.window)
         self.werewolf_moderator = werewolf_moderator
 
+        # Message label
         self.message_lbl = tk.Label(master=self, text='Select an option below...')
         self.message_lbl.pack(side=tk.TOP, pady=(5,5))
 
+        # Night button
         self.night_btn = tk.Button(master=self, text='Night', height=4, command=self.night)
         self.night_btn.pack(side=tk.TOP, fill=tk.X, expand=True, padx=(10,10), pady=(5,0))
 
+        # Day button
         self.day_btn = tk.Button(master=self, text='Day', height=4, command=self.day)
         self.day_btn.pack(side=tk.TOP, fill=tk.X, expand=True, padx=(10,10), pady=(5,0))
 
+        # Exit button
         self.exit_btn = tk.Button(master=self, text='Exit', height=4, command=werewolf_moderator.ask_close)
         self.exit_btn.pack(side=tk.TOP, fill=tk.X, expand=True, padx=(10,10), pady=(5,0))
     
@@ -482,6 +533,7 @@ class WerewolfModeratorMainMenu(tk.Frame):
         Begins the night phase for this frame's werewolf moderator instance. The WerewolfModerator's night 
         function is executed in a new thread.
         """
+        # Begin night phase using separate thread
         night_thread = threading.Thread(target=self.werewolf_moderator.night)
         night_thread.daemon = True
         night_thread.start()
@@ -493,6 +545,7 @@ class WerewolfModeratorMainMenu(tk.Frame):
         Begins the day phase for this frame's werewolf moderator instance. The WerewolfModerator's day 
         function is executed in a new thread.
         """
+        # Begin day phase using separate thread
         day_thread = threading.Thread(target=self.werewolf_moderator.day)
         day_thread.daemon = True
         day_thread.start()
@@ -519,11 +572,13 @@ class WerewolfModeratorWaitingFrame(tk.Frame):
         super().__init__(master=werewolf_moderator.window)
         self.werewolf_moderator = werewolf_moderator
 
+        # Labels
         self.main_lbl = tk.Label(master=self, text='Waiting')
         self.main_lbl.pack(side=tk.TOP)
         self.message_lbl = tk.Label(master=self, text='Waiting for responses from: ')
         self.message_lbl.pack(side=tk.TOP)
 
+        # Clients display
         self.waiting_clients_display = WerewolfModeratorClientDisplay(self)
         self.waiting_clients_display.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
@@ -555,14 +610,17 @@ class WerewolfModeratorGameOverFrame(tk.Frame):
         """
         super().__init__(master=werewolf_moderator.window)
 
+        # Labels
         self.main_lbl = tk.Label(master=self, text='Game Over')
         self.main_lbl.pack(side=tk.TOP)
         self.message_lbl = tk.Label(master=self, text='')
         self.message_lbl.pack(side=tk.TOP)
 
+        # Clients display
         self.client_display = WerewolfModeratorClientRolesDisplay(self)
         self.client_display.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
+        # Buttons frame
         self.btn_frame = tk.Frame(master=self)
         self.server_btn = tk.Button(master=self.btn_frame, text='Main Menu', width=10,  command=werewolf_moderator.accept_clients)
         self.server_btn.pack(side=tk.LEFT, padx=(0,5))
