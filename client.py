@@ -1,9 +1,10 @@
+import socket
 import threading
 import time
-from shared import HOST, PORT, Roles, WerewolfModeratorClientDisplay
-import socket
 import tkinter as tk
 from tkinter.messagebox import askyesno, showerror, showinfo
+
+from shared import HOST, PORT, Roles, WerewolfModeratorClientDisplay
 
 
 class Player:
@@ -50,23 +51,28 @@ class Client(socket.socket, Player):
         Player.__init__(self)
         self.selected_player = None
 
+        # Root Window
         self.window = tk.Tk()
         self.window.title('Werewolf')
         self.window.resizable(False, False)
         self.window.geometry('300x300')
         
+        # Join Frame
         self.join_frame = WerewolfModeratorClientJoinFrame(self)
         self.join_frame.pack(side=tk.TOP)
 
+        # Role Label
         self.role_lbl = tk.Label(master=self.window, text='Enter your name and click to join the server...')
         self.role_lbl.pack(side=tk.TOP)
 
+        # Frames
         self.main_frame = WerewolfModeratorMainFrame(self.window)
         self.player_select_frame = WerewolfModeratorPlayerSelectionFrame(self)
         self.eliminated_frame = WerewolfModeratorEliminationFrame(self.window)
         self.gameover_frame = WerewolfGameOverClientDisplay(self)
         self.frame_windows = [self.main_frame, self.player_select_frame, self.eliminated_frame, self.gameover_frame]
 
+        # Display GUI
         self.display_frame(self.main_frame)
 
     def display_frame(self, frame_to_display: tk.Frame) -> None:
@@ -100,6 +106,8 @@ class Client(socket.socket, Player):
                 main server.
         """
         self.name = name
+
+        # Attempt to connect to werewolf moderator main server
         try:
             socket.socket.__init__(self, socket.AF_INET, socket.SOCK_STREAM)
             self.connect((HOST, PORT))
@@ -107,11 +115,14 @@ class Client(socket.socket, Player):
         except Exception as e:
             showerror(title='Unable to Connect to Server', message='Unable to connect to the server, please try again later...')
         else:
+            # Determine if user connection has been accepted
             accepted, msg = self.recv(4096).decode().strip().split('|')
             if accepted == 'True':
                 self.join_frame.connected()
                 self.role_lbl['text'] = 'Welcome to Werewolf'
                 self.main_frame.main_message_lbl['text'] = msg
+                
+                # Create new thread for receiving data from server
                 send_receive_thread = threading.Thread(target=self.receive_from_server)
                 send_receive_thread.daemon = True
                 send_receive_thread.start()
@@ -127,12 +138,16 @@ class Client(socket.socket, Player):
             players_encoded: str
                 Encoded string that contains a list of players and their respective roles 
         """
+        # Separate players
         players_encoded_list = players_encoded.split(',')
+        
+        # Parse each player's name & role
         players = []
         for player in players_encoded_list:
             name, role = player.split(':')
             role = Roles(role)
             players.append(Player(name, role))
+
         return players
 
     def receive_from_server(self) -> None:
@@ -143,12 +158,15 @@ class Client(socket.socket, Player):
         This loop is terminated by the server, which results in a message being displayed to the user
         indicating as such.
         """
+        # Receive data from server until socket is closed by the server
         while True:
             from_server = self.recv(4096).decode().strip()
 
+            # Check if socket has been closed by the server
             if not from_server:
                 break
             
+            # Parse & interpret data from server
             action, rem = from_server.split('|')            
             if action == 'ROLE':
                 role = rem
@@ -179,6 +197,8 @@ class Client(socket.socket, Player):
                 self.main_frame.main_message_lbl['text'] = f'{"Werewolves" if werewolves_won else "Villagers"} have won!'
                 self.gameover_frame.display(self.role, werewolves_won)
                 self.display_frame(self.gameover_frame)
+
+        # Socket has been closed by the server
         showerror(title='Server Disconnected', message='Disconnected from server')
         self.exit()
 
@@ -201,6 +221,8 @@ class Client(socket.socket, Player):
                 from which the selected player should be chosen.
         """
         self.player_select_frame.message_lbl['text'] = f'Night'
+        
+        # Display user's night action
         if self.role == Roles.VILLAGER:
             self.player_select_frame.selection_lbl['text'] = 'Select a random person...'
             excluded_players = []
@@ -216,12 +238,14 @@ class Client(socket.socket, Player):
             self.player_select_frame.selection_lbl['text'] = 'Select the player you would like to identify...'
             excluded_players = [self.name]
 
+        # Get user's player selection choice
         self.player_select_frame.update([player.name for player in players], excluded_players)
         self.display_frame(self.player_select_frame)
         self.wait_select_player()
         self.main_frame.main_message_lbl['text'] = f'Waiting for other players to respond...'
         self.display_frame(self.main_frame)
 
+        # Attempt to send user's player selection response to the server
         try:
             if self.role == Roles.VILLAGER:
                 showinfo(title='Send Selection', message='Sending selection to server...')
@@ -256,12 +280,14 @@ class Client(socket.socket, Player):
         self.player_select_frame.message_lbl['text'] = f'Day'
         self.player_select_frame.selection_lbl['text'] = 'Please select a person for trial...'
         self.player_select_frame.update([player.name for player in players], [self.name])
-        
+
+        # Get user's player selection choice        
         self.display_frame(self.player_select_frame)
         self.wait_select_player()
         self.main_frame.main_message_lbl['text'] = f'Waiting for other players to respond...'
         self.display_frame(self.main_frame)
         
+        # Attempt to send user's player selection response to the server
         try:
             self.send(self.selected_player.encode())
         except Exception as e:
@@ -294,6 +320,9 @@ class Client(socket.socket, Player):
         self.window.destroy()
 
 
+################################################################################################################
+#                                                    FRAMES                                                    #
+################################################################################################################
 class WerewolfModeratorClientJoinFrame(tk.Frame):
     """ 
     Tkinter frame containing elements allowing a client to join the server for a game of werewolf. 
@@ -314,7 +343,8 @@ class WerewolfModeratorClientJoinFrame(tk.Frame):
         """
         super().__init__(master=client.window)
         self.client = client
-
+        
+        # Name Frame
         self.name_frame = tk.Frame(master=self)
         tk.Label(master=self.name_frame, text='Name: ').pack(side=tk.LEFT)
         self.name_ent = tk.Entry(master=self.name_frame, justify='center')
@@ -333,6 +363,8 @@ class WerewolfModeratorClientJoinFrame(tk.Frame):
         (must be between 1 and 15 characters long).
         """
         name = self.name_ent.get().strip()
+
+        # Ensure name is valid
         if 1 <= len(name) <= 15:
             self.client.connect_to_server(name)
         else:
@@ -400,11 +432,15 @@ class WerewolfGameOverClientDisplay(tk.Frame):
         super().__init__(master=client.window)
         self.werewolf_moderator = client
 
+        # Role label
         self.role_lbl = tk.Label(master=self, text='')
         self.role_lbl.pack(side=tk.TOP)
+        
+        # Results label
         self.winning_lbl = tk.Label(master=self, text='')
         self.winning_lbl.pack(side=tk.TOP)
         
+        # Buttons frame
         self.btn_frame = tk.Frame(master=self)
         self.server_btn = tk.Button(master=self.btn_frame, text='Play Again', width=10,  command=client.play_again)
         self.server_btn.pack(side=tk.LEFT, padx=(0,5))
@@ -451,6 +487,7 @@ class WerewolfModeratorEliminationFrame(tk.Frame):
         """
         super().__init__(master=window)
 
+        # Elimination Labels
         tk.Label(master=self, text= f'You have been eliminated').pack()
         tk.Label(master=self, text='Please do not disclose your role...').pack(side=tk.TOP)
         tk.Label(master=self, text='All roles will be displayed when the game is over...').pack(side=tk.TOP)
@@ -490,6 +527,8 @@ class WerewolfModeratorSelectableClientDisplay(WerewolfModeratorClientDisplay):
                 Names of the clients that should not be displayed and allowed for selection.
         """
         super().update(client_names=client_names, excluded_clients=excluded_clients)
+
+        # Allow listbox to be selectable
         self.clients_lb.config(state=tk.NORMAL)
         
     def select_client(self) -> None:
@@ -498,7 +537,10 @@ class WerewolfModeratorSelectableClientDisplay(WerewolfModeratorClientDisplay):
 
         Includes validation ensuring that the user selects one and only one client.
         """
+        # Get item selected
         selection = self.clients_lb.curselection()
+
+        # Ensure item has been selected
         if selection:
             idx = selection[0]
             self.client.selected_player = self.client_names[idx]
@@ -532,14 +574,17 @@ class WerewolfModeratorPlayerSelectionFrame(tk.Frame):
         super().__init__(master=client.window)
         self.players = []
 
+        # Labels
         self.message_lbl = tk.Label(master=self, text='')
         self.message_lbl.pack(side=tk.TOP)
         self.selection_lbl = tk.Label(master=self, text='')
         self.selection_lbl.pack(side=tk.TOP)
 
+        # Client display listbox
         self.client_display = WerewolfModeratorSelectableClientDisplay(self, client)
         self.client_display.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
+        # Select button
         self.select_btn = tk.Button(master=self, text='Select', command=self.client_display.select_client)
         self.select_btn.pack(side=tk.BOTTOM, pady=(10,0))
     
